@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestão Financeira</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <section class="header">
+      <div class="brand">
+        <h1>Gestão Financeira</h1>
+        <p>Controle mensal inteligente com entradas, saídas, cartão de crédito e despesas fixas.</p>
+      </div>
+      <div class="header-actions">
+        <div class="action-menu">
+          <button class="button" type="button" id="openTransactionModal">Nova transação</button>
+          <button class="button-secondary" type="button" id="openFixedModal">Nova transação fixa</button>
+          <button class="button-secondary" type="button" id="exportData">Exportar JSON</button>
+          <button class="button-secondary" type="button" id="importData">Importar JSON</button>
+        </div>
+        <div class="header-actions-right">
+          <select id="monthSelector" class="button-secondary" aria-label="Selecionar mês"></select>
+          <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;" />
+        </div>
+      </div>
+    </section>
+
+
+    <section class="stats-grid">
+      <article class="card">
+        <h3>Entradas</h3>
+        <strong id="sumEntrada">R$ 0,00</strong>
+        <small>Receitas positivas do mês.</small>
+      </article>
+      <article class="card">
+        <h3>Saídas</h3>
+        <strong id="sumSaida">R$ 0,00</strong>
+        <small>Gastos variáveis monitorados.</small>
+      </article>
+      <article class="card">
+        <h3>Cartão de crédito</h3>
+        <strong id="sumCartao">R$ 0,00</strong>
+        <small>Compras e faturas do cartão.</small>
+      </article>
+      <article class="card">
+        <h3>Despesas fixas</h3>
+        <strong id="sumFixa">R$ 0,00</strong>
+        <small>Pagamentos mensais recorrentes.</small>
+      </article>
+    </section>
+
+    <section class="month-overview">
+      <div class="overview-header">
+        <div>
+          <h2>Visão geral dos meses</h2>
+          <p>Comparativo dos últimos meses para analisar tendências de receita, gasto e saldo.</p>
+        </div>
+      </div>
+      <div class="overview-grid" id="monthOverviewGrid"></div>
+    </section>
+
+    <section class="main-grid">
+      <div class="panel">
+        <div class="summary-card">
+          <h2>Resumo do mês</h2>
+          <strong id="sumSaldo">R$ 0,00</strong>
+          <ul class="summary-list" id="detailsList"></ul>
+        </div>
+
+        <section class="card card-slim">
+          <h2>Melhores análises</h2>
+          <p>Edite qualquer transação ou despesa fixa diretamente na tabela. Use os botões acima para adicionar novos registros.</p>
+        </section>
+      </div>
+
+      <div class="panel">
+        <section class="table-panel">
+          <h2>Transações do mês</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Descrição</th>
+                <th>Categoria</th>
+                <th>Tipo</th>
+                <th>Valor</th>
+                <th>Cartão</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="transactionTable"></tbody>
+          </table>
+        </section>
+
+        <section class="table-panel">
+          <h2>Transações fixas</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Descrição</th>
+                <th>Categoria</th>
+                <th>Tipo</th>
+                <th>Valor</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="fixedTable"></tbody>
+          </table>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <section class="month-overview">
+    <div class="overview-header">
+      <div>
+        <h2>Visão geral dos meses</h2>
+        <p>Comparativo dos últimos meses para analisar tendências de receita, gasto e saldo.</p>
+      </div>
+    </div>
+    <div class="overview-grid" id="monthOverviewGrid"></div>
+  </section>
+
+  <div class="modal-overlay" id="transactionModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h3 id="transactionModalTitle">Nova transação</h3>
+          <p>Insira dados de entrada, saída, cartão ou despesa fixa.</p>
+        </div>
+        <button class="modal-close" type="button" id="closeTransactionModal">×</button>
+      </div>
+      <form id="transactionModalForm" class="form-grid">
+        <input type="hidden" id="transactionId" />
+        <div class="field-group">
+          <label for="transactionDate">Data</label>
+          <input type="date" id="transactionDate" required />
+        </div>
+        <div class="field-group">
+          <label for="transactionDescription">Descrição</label>
+          <input type="text" id="transactionDescription" placeholder="Nome da transação" required />
+        </div>
+        <div class="field-group">
+          <label for="transactionCategory">Categoria</label>
+          <input type="text" id="transactionCategory" placeholder="Ex: Alimentação, Salário" required />
+        </div>
+        <div class="field-group">
+          <label for="transactionType">Tipo</label>
+          <select id="transactionType" required>
+            <option value="entrada">Entrada</option>
+            <option value="saida">Saída</option>
+            <option value="cartao">Cartão de crédito</option>
+            <option value="fixa">Despesa fixa</option>
+          </select>
+        </div>
+        <div class="field-group" id="transactionCardRow" style="display:none;">
+          <label for="transactionCard">Cartão</label>
+          <input type="text" id="transactionCard" placeholder="Nome do cartão" />
+        </div>
+        <div class="field-group">
+          <label for="transactionValue">Valor</label>
+          <input type="number" id="transactionValue" step="0.01" placeholder="0.00" required />
+        </div>
+        <div class="field-group">
+          <label for="transactionStatus">Status</label>
+          <select id="transactionStatus" required>
+            <option value="pago">Pago</option>
+            <option value="não_pago">Não pago</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="button-secondary" type="button" id="cancelTransaction">Cancelar</button>
+          <button class="button" type="submit">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="fixedModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h3 id="fixedModalTitle">Nova transação fixa</h3>
+          <p>Adicione ou edite uma entrada ou despesa recorrente.</p>
+        </div>
+        <button class="modal-close" type="button" id="closeFixedModal">×</button>
+      </div>
+      <form id="fixedModalForm" class="form-grid">
+        <input type="hidden" id="fixedId" />
+        <div class="field-group">
+          <label for="fixedDescription">Descrição</label>
+          <input type="text" id="fixedDescription" placeholder="Ex: Aluguel, Salário" required />
+        </div>
+        <div class="field-group">
+          <label for="fixedCategory">Categoria</label>
+          <input type="text" id="fixedCategory" placeholder="Ex: Moradia, Renda" required />
+        </div>
+        <div class="field-group">
+          <label for="fixedType">Tipo</label>
+          <select id="fixedType" required>
+            <option value="entrada">Entrada</option>
+            <option value="saida">Saída</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="fixedAmount">Valor mensal</label>
+          <input type="number" id="fixedAmount" step="0.01" placeholder="0.00" required />
+        </div>
+        <div class="field-group">
+          <label for="fixedStatus">Status</label>
+          <select id="fixedStatus" required>
+            <option value="pago">Pago</option>
+            <option value="não_pago">Não pago</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="button-secondary" type="button" id="cancelFixed">Cancelar</button>
+          <button class="button" type="submit">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
