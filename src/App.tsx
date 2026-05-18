@@ -3,11 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   LayoutDashboard, 
@@ -18,14 +13,15 @@ import {
   Menu, 
   X, 
   LogOut, 
-  User as UserIcon,
-  TrendingDown,
-  TrendingUp,
   ChevronRight,
   Filter,
   CreditCard,
   Pencil,
-  Trash2
+  Trash2,
+  Loader2,
+  AlertCircle,
+  TrendingUp,
+  TrendingDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -44,21 +40,10 @@ import {
   Area
 } from 'recharts';
 import { Transaction, TransactionType, TransactionStatus, View, LoanReport } from './types';
+import { useAuth } from './hooks/useAuth';
+import { useTransactions } from './hooks/useTransactions';
 
-// Simple initial data for demonstration
-const INITIAL_TRANSACTIONS: Transaction[] = [
-  { id: '1', description: 'Salário', amount: 5000, date: '2026-05-01', type: TransactionType.INCOME, category: 'Salário', isFixed: true, status: TransactionStatus.PAID, paymentDate: '2026-05-01', paymentMethod: 'cash' },
-  { id: '2', description: 'Aluguel', amount: 1500, date: '2026-05-02', type: TransactionType.EXPENSE, category: 'Moradia', isFixed: true, status: TransactionStatus.PAID, paymentDate: '2026-05-02', paymentMethod: 'cash' },
-  { id: '3', description: 'Mercado', amount: 800, date: '2026-05-10', type: TransactionType.EXPENSE, category: 'Alimentação', isFixed: false, status: TransactionStatus.PAID, paymentDate: '2026-05-10', paymentMethod: 'credit' },
-  { id: '4', description: 'Empréstimo João', amount: 200, date: '2026-05-12', type: TransactionType.EXPENSE, category: 'Empréstimo', isFixed: false, status: TransactionStatus.PAID, paymentDate: '2026-05-12', person: 'João', paymentMethod: 'cash' },
-  { id: '5', description: 'Pagamento João', amount: 50, date: '2026-05-15', type: TransactionType.INCOME, category: 'Empréstimo', isFixed: false, status: TransactionStatus.PENDING, person: 'João', paymentMethod: 'cash' },
-  { id: '6', description: 'Freelance', amount: 1200, date: '2026-05-05', type: TransactionType.INCOME, category: 'Extra', isFixed: false, status: TransactionStatus.PENDING, paymentMethod: 'cash' },
-  { id: '7', description: 'Internet', amount: 100, date: '2026-05-20', type: TransactionType.EXPENSE, category: 'Utilidades', isFixed: true, status: TransactionStatus.PENDING, paymentMethod: 'cash' },
-  { id: '8', description: 'Academia', amount: 120, date: '2026-04-10', type: TransactionType.EXPENSE, category: 'Saúde', isFixed: true, status: TransactionStatus.PENDING, paymentMethod: 'cash' },
-  { id: '9', description: 'Seguro Carro', amount: 350, date: '2026-04-15', type: TransactionType.EXPENSE, category: 'Transporte', isFixed: true, status: TransactionStatus.PENDING, paymentMethod: 'cash' },
-  { id: '10', description: 'Assinatura Stream', amount: 55.90, date: '2026-05-05', type: TransactionType.EXPENSE, category: 'Lazer', isFixed: true, status: TransactionStatus.PAID, paymentDate: '2026-05-05', paymentMethod: 'credit' },
-  { id: '11', description: 'Restaurante', amount: 150, date: '2026-05-12', type: TransactionType.EXPENSE, category: 'Alimentação', isFixed: false, status: TransactionStatus.PAID, paymentDate: '2026-05-12', paymentMethod: 'credit' },
-];
+
 
 const CATEGORIES = [
   'Alimentação',
@@ -72,13 +57,14 @@ const CATEGORIES = [
 ];
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { isLoggedIn, authUser, loading, authError, signIn, signUp, signOut, clearError } = useAuth();
+  const { transactions, loadingTransactions, syncError, saveTransaction, saveManyTransactions, deleteTransaction, updateTransaction } = useTransactions(authUser?.id);
+
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [user, setUser] = useState({ name: '', email: '', password: '' });
+  const [formAuth, setFormAuth] = useState({ name: '', email: '', password: '' });
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [filterMonth, setFilterMonth] = useState('2026-05');
+  const [filterMonth, setFilterMonth] = useState(new Date().toISOString().substring(0, 7));
 
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [isFixedModalOpen, setIsFixedModalOpen] = useState(false);
@@ -100,7 +86,7 @@ export default function App() {
         return;
       }
     }
-    setTransactions(prev => prev.filter(t => t.id !== id));
+    deleteTransaction(id);
   };
 
   const handleEditTransaction = (transaction: Transaction) => {
@@ -113,22 +99,15 @@ export default function App() {
   };
 
   const handleSaveTransaction = (transaction: Transaction) => {
-    setTransactions(prev => {
-      const exists = prev.find(t => t.id === transaction.id);
-      if (exists) {
-        return prev.map(t => t.id === transaction.id ? transaction : t);
-      }
-      return [...prev, transaction];
-    });
+    saveTransaction(transaction);
     setEditingTransaction(null);
   };
 
   const handleExecutePayment = (transaction: Transaction, amount: number, paymentDate: string, month: string) => {
     if (transaction.isFixed) {
-      // Create a specific transaction for this month
       const newTransaction: Transaction = {
         ...transaction,
-        id: Math.random().toString(36).substr(2, 9),
+        id: crypto.randomUUID(),
         isFixed: false,
         amount: amount,
         date: `${month}-${transaction.date.split('-')[2]}`,
@@ -136,15 +115,9 @@ export default function App() {
         status: TransactionStatus.PAID,
         parentId: transaction.id
       };
-      setTransactions(prev => [...prev, newTransaction]);
+      saveTransaction(newTransaction);
     } else {
-      // Update existing transaction
-      setTransactions(prev => prev.map(t => t.id === transaction.id ? {
-        ...t,
-        amount: amount,
-        paymentDate: paymentDate,
-        status: TransactionStatus.PAID
-      } : t));
+      updateTransaction({ ...transaction, amount, paymentDate, status: TransactionStatus.PAID });
     }
     setIsPaymentModalOpen(false);
     setPaymentTarget(null);
@@ -152,37 +125,27 @@ export default function App() {
 
   const handlePayBill = (month: string, amount: number) => {
     if (amount <= 0) return;
-
     const paymentDate = new Date().toISOString().split('T')[0];
     const billPayment: Transaction = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       description: `Pagamento Fatura ${month}`,
-      amount: amount,
+      amount,
       date: paymentDate,
       type: TransactionType.EXPENSE,
       category: 'Cartão de Crédito',
       isFixed: false,
-      paymentDate: paymentDate,
+      paymentDate,
       status: TransactionStatus.PAID,
       paymentMethod: 'cash'
     };
-
-    setTransactions(prev => [...prev, billPayment]);
+    saveTransaction(billPayment);
   };
 
   const handleCancelPayBill = (month: string) => {
-    setTransactions(prev => {
-      // Find the bill payment transaction
-      const billPaymentId = prev.find(t => 
-        t.description === `Pagamento Fatura ${month}` && 
-        t.category === 'Cartão de Crédito'
-      )?.id;
-
-      if (!billPaymentId) return prev;
-
-      // Filter out the payment
-      return prev.filter(t => t.id !== billPaymentId);
-    });
+    const billPayment = transactions.find(t => 
+      t.description === `Pagamento Fatura ${month}` && t.category === 'Cartão de Crédito'
+    );
+    if (billPayment) deleteTransaction(billPayment.id);
   };
 
   // Calculations
@@ -275,24 +238,28 @@ export default function App() {
     return people.map(person => {
       const out = transactions.filter(t => t.person === person && t.type === TransactionType.EXPENSE).reduce((acc, t) => acc + t.amount, 0);
       const incoming = transactions.filter(t => t.person === person && t.type === TransactionType.INCOME).reduce((acc, t) => acc + t.amount, 0);
-      return { person, out, in: incoming, balance: out - incoming };
+      return { person: person as string, out, in: incoming, balance: out - incoming };
     }).filter(report => report.balance !== 0);
   }, [transactions]);
 
   // Auth handler
-  const handleAuth = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authMode === 'register') {
-      if (user.name && user.email && user.password) {
-        setIsLoggedIn(true);
-      }
+      await signUp(formAuth.name, formAuth.email, formAuth.password);
     } else {
-      if (user.email && user.password) {
-        setIsLoggedIn(true);
-        if (!user.name) setUser(prev => ({ ...prev, name: prev.email.split('@')[0] }));
-      }
+      await signIn(formAuth.email, formAuth.password);
     }
   };
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 size={32} className="animate-spin text-white/50" />
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return (
@@ -308,6 +275,14 @@ export default function App() {
               {authMode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta gratuita'}
             </p>
           </div>
+
+          {authError && (
+            <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 mb-4 text-rose-400 text-sm">
+              <AlertCircle size={16} />
+              <span>{authError}</span>
+            </div>
+          )}
+
           <form onSubmit={handleAuth} className="space-y-4">
             <AnimatePresence mode="popLayout" initial={false}>
               {authMode === 'register' && (
@@ -322,13 +297,12 @@ export default function App() {
                     required
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-white transition-colors"
                     placeholder="Seu nome completo"
-                    value={user.name}
-                    onChange={e => setUser({...user, name: e.target.value})}
+                    value={formAuth.name}
+                    onChange={e => setFormAuth({...formAuth, name: e.target.value})}
                   />
                 </motion.div>
               )}
             </AnimatePresence>
-            
             <div>
               <label className="block text-xs uppercase tracking-widest text-secondary mb-1 ml-1 font-semibold">Email</label>
               <input 
@@ -336,8 +310,8 @@ export default function App() {
                 required
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-white transition-colors"
                 placeholder="seu@email.com"
-                value={user.email}
-                onChange={e => setUser({...user, email: e.target.value})}
+                value={formAuth.email}
+                onChange={e => { clearError(); setFormAuth({...formAuth, email: e.target.value}); }}
               />
             </div>
             <div>
@@ -345,10 +319,11 @@ export default function App() {
               <input 
                 type="password" 
                 required
+                minLength={6}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-white transition-colors"
                 placeholder="••••••••"
-                value={user.password}
-                onChange={e => setUser({...user, password: e.target.value})}
+                value={formAuth.password}
+                onChange={e => { clearError(); setFormAuth({...formAuth, password: e.target.value}); }}
               />
             </div>
             <button 
@@ -361,7 +336,7 @@ export default function App() {
 
           <div className="mt-8 pt-6 border-t border-white/5 text-center">
             <button 
-              onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+              onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); clearError(); }}
               className="text-sm font-medium text-secondary hover:text-white transition-colors"
             >
               {authMode === 'login' ? (
@@ -435,15 +410,15 @@ export default function App() {
         <div className="p-6 border-t border-white/5 space-y-4">
           <div className="flex items-center gap-3 px-2">
             <div className="w-10 h-10 rounded-xl glass flex items-center justify-center text-white font-bold">
-              {user.name.charAt(0).toUpperCase()}
+              {(authUser?.name || 'U').charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="font-semibold truncate">{user.name}</p>
-              <p className="text-xs text-secondary truncate">{user.email}</p>
+              <p className="font-semibold truncate">{authUser?.name}</p>
+              <p className="text-xs text-secondary truncate">{authUser?.email}</p>
             </div>
           </div>
           <button 
-            onClick={() => setIsLoggedIn(false)}
+            onClick={() => signOut()}
             className="w-full flex items-center gap-3 px-3 py-3 rounded-xl glass-hover text-rose-400 font-medium"
           >
             <LogOut size={20} />
@@ -609,7 +584,7 @@ function FixedTransactionModal({ isOpen, editingTransaction, transactions, onClo
 
     // For now, we add it to the current month view as a fixed transaction
     const transaction: Transaction = {
-      id: editingTransaction ? editingTransaction.id : Math.random().toString(36).substr(2, 9),
+      id: editingTransaction ? editingTransaction.id : crypto.randomUUID(),
       description: formData.description,
       amount: parseFloat(formData.amount),
       date: `${formData.startMonth}-${formData.dueDay.padStart(2, '0')}`,
@@ -830,7 +805,7 @@ function TransactionModal({ isOpen, editingTransaction, transactions, onClose, o
     }
 
     const baseTransaction: Transaction = {
-      id: editingTransaction ? editingTransaction.id : Math.random().toString(36).substr(2, 9),
+      id: editingTransaction ? editingTransaction.id : crypto.randomUUID(),
       description: formData.description,
       amount: parseFloat(formData.amount),
       date: method === 'credit' ? `${formData.billMonth}-01` : formData.paymentDate,
@@ -847,6 +822,7 @@ function TransactionModal({ isOpen, editingTransaction, transactions, onClose, o
       const numInstallments = parseInt(formData.installments);
       const installmentAmount = parseFloat(formData.amount) / numInstallments;
       const [startYear, startMonth] = formData.billMonth.split('-').map(Number);
+      const installments: Transaction[] = [];
 
       for (let i = 0; i < numInstallments; i++) {
         let currentYear = startYear;
@@ -861,13 +837,14 @@ function TransactionModal({ isOpen, editingTransaction, transactions, onClose, o
         
         const installmentTransaction: Transaction = {
           ...baseTransaction,
-          id: Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(),
           description: `${formData.description} (${i + 1}/${numInstallments})`,
           amount: installmentAmount,
           date: `${formattedMonth}-01`,
         };
-        onAdd(installmentTransaction);
+        installments.push(installmentTransaction);
       }
+      installments.forEach(t => onAdd(t));
     } else {
       onAdd(baseTransaction);
     }
